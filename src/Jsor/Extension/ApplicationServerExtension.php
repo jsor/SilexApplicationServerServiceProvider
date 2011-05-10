@@ -91,7 +91,7 @@ class ApplicationServerExtension implements ExtensionInterface
 
             while ($conn = stream_socket_accept($socket, -1)) {
                 do {
-                    $str = stream_get_line($conn, 0, "\r\n\r\n");
+                    $str = stream_get_line($conn);
 
                     if ('' === $str) {
                         // client just disconnected
