@@ -109,7 +109,48 @@ class ApplicationServerExtension implements ExtensionInterface
 
                     $response = $app->handle($request);
 
-                    fwrite($conn, $response->__toString());
+                    // Squeeze cookie headers in, ugly hack...
+                    $cookieHeaders = '';
+                    foreach ($response->headers->getCookies() as $cookie) {
+                        $string = $cookie->getName().'=';
+
+                        if ('' == $cookie->getValue()) {
+                            // deleting
+                            $string .= 'deleted; expires='.date("D, d-M-Y H:i:s T", time() - 31536001);
+                        } else {
+                            $string .= urlencode($cookie->getValue());
+
+                            if ($cookie->getExpiresTime() > 0) {
+                                $string .= '; expires='.date("D, d-M-Y H:i:s T", $cookie->getExpiresTime());
+                            }
+                        }
+
+                        if (null !== $cookie->getPath()) {
+                            $string .= '; path='.$cookie->getPath();
+                        }
+
+                        if (null !== $cookie->getDomain()) {
+                            $string .= '; domain='.$cookie->getDomain();
+                        }
+
+                        if (true === $cookie->isSecure()) {
+                            $string .= '; secure';
+                        }
+
+                        if (true === $cookie->isHttpOnly()) {
+                            $string .= '; httponly';
+                        }
+
+                        $cookieHeaders .= $string . "\n";
+                    }
+                    
+                    $response = $response->__toString();
+                    
+                    if ($cookieHeaders != '') {
+                        $response = str_replace("\n\n", "\n" . $cookieHeaders . "\n");
+                    }
+
+                    fwrite($conn, $response);
                 }
 
                 fclose($conn);
