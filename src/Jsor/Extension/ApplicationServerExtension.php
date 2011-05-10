@@ -88,6 +88,16 @@ class ApplicationServerExtension implements ExtensionInterface
             echo "  Host: " . $host . "\n";
             echo "  Port: " . $port . "\n";
             echo "  Script: " . $script . "\n\n";
+            
+            $app = $this->getApplication();
+                
+            $app->error(function(\Exception $e) {
+                echo "  Exception handled\n";
+                echo "    Name: " . get_class($e) . "\n";
+                echo "    Message: " . $e->getMessage() . "\n\n";
+
+                return new Response('The server encountered an internal error and was unable to complete your request.', 500);
+            });
 
             while ($conn = stream_socket_accept($socket, -1)) {
                 do {
@@ -110,16 +120,6 @@ class ApplicationServerExtension implements ExtensionInterface
                 echo "Incoming request\n";
                 echo "  Request Uri: " . $request->getRequestUri() . "\n";
                 echo "  Remote Addr: " . $remoteAddr . "\n\n";
-
-                $app = $this->getApplication();
-                
-                $app->error(function(\Exception $e) {
-                    echo "  Exception handled\n";
-                    echo "    Name: " . get_class($e) . "\n";
-                    echo "    Message: " . $e->getMessage() . "\n\n";
-                    
-                    return new Response('The server encountered an internal error and was unable to complete your request.', 500);
-                });
 
                 $response = $app->handle($request);
 
