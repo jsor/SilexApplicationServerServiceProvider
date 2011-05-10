@@ -27,7 +27,7 @@ class ApplicationServerExtension implements ExtensionInterface
      * @var Application
      */
     private $application;
-    
+
     /**
      * Register the extension.
      * 
@@ -41,7 +41,7 @@ class ApplicationServerExtension implements ExtensionInterface
             return $self->setApplication($app);
         });
     }
-    
+
     /**
      * @param Application $app
      * @return ApplicationServerExtension 
@@ -51,7 +51,7 @@ class ApplicationServerExtension implements ExtensionInterface
         $this->application = $app;
         return $this;
     }
-    
+
     /**
      * @return Application 
      */
@@ -59,7 +59,7 @@ class ApplicationServerExtension implements ExtensionInterface
     {
         return $this->application;
     }
-    
+
     /**
      * Start the application server.
      * 
@@ -88,9 +88,9 @@ class ApplicationServerExtension implements ExtensionInterface
             echo "  Host: " . $host . "\n";
             echo "  Port: " . $port . "\n";
             echo "  Script: " . $script . "\n\n";
-            
+
             $app = $this->getApplication();
-                
+
             $app->error(function(\Exception $e) {
                 echo "  Exception handled\n";
                 echo "    Name: " . get_class($e) . "\n";
@@ -100,64 +100,97 @@ class ApplicationServerExtension implements ExtensionInterface
             });
 
             while ($conn = stream_socket_accept($socket, -1)) {
-                do {
-                    $str = stream_get_line($conn, 0, "\r\n\r\n");
+                $request = $this->createRequest($conn, $host, $port, $script);
 
-                    if ('' === $str) {
-                        // client just disconnected
-                        continue 2;
-                    }
-                } while (false === $str);
+                if (false !== $request) {
+                    echo "Incoming request\n";
+                    echo "  Request Uri: " . $request->getRequestUri() . "\n";
+                    echo "  Remote Addr: " . $request->getClientIp() . "\n\n";
 
-                $remoteAddr = stream_socket_get_name($conn, true);
+                    $response = $app->handle($request);
 
-                if (false === $remoteAddr) {
-                    $remoteAddr = null;
+                    fwrite($conn, $response->__toString());
                 }
 
-                $request = $this->createRequest($str, $host, $port, $script, $remoteAddr);
-
-                echo "Incoming request\n";
-                echo "  Request Uri: " . $request->getRequestUri() . "\n";
-                echo "  Remote Addr: " . $remoteAddr . "\n\n";
-
-                $response = $app->handle($request);
-
-                fwrite($conn, $response->__toString());
                 fclose($conn);
             }
 
             fclose($socket);
         }
-        
+
         return $this;
     }
 
     /**
      * Create Request object
      *
-     * @param string $str
+     * @param resource $conn
      * @param string $host
      * @param string $port
      * @param string $script
-     * @param string $remoteAddr
      * @return Request 
      */
-    public function createRequest($str, $host, $port, $script, $remoteAddr)
+    public function createRequest($conn, $host, $port, $script)
     {
-        $parameters = array();
-        $cookies    = array();
-        $files      = array();
-        $server     = array();
-        $content    = '';
+        do {
+            $str = stream_get_line($conn, 0, "\r\n\r\n");
 
-        $parts = preg_split('|(?:\r?\n){2}|m', $str, 2);
+            if ('' === $str) {
+                // client just disconnected
+                return false;
+            }
+        } while (false === $str);
 
-        if (isset($parts[1])) {
-            $content = $parts[1];
+        $server = $this->parseHeaders($str, $host, $port, $script);
+
+        $remoteAddr = stream_socket_get_name($conn, true);
+
+        if ($remoteAddr) {
+            if (false === ($pos = strpos($remoteAddr, ':'))) {
+                $server['REMOTE_ADDR'] = $remoteAddr;
+            } else {
+                $server['REMOTE_ADDR'] = substr($remoteAddr, 0, $pos);
+                $server['REMOTE_PORT'] = substr($remoteAddr, $pos + 1);
+            }
         }
 
-        $lines = explode("\r\n", $parts[0]); // getting headers
+        $cookies = array();
+
+        if (!empty($server['HTTP_COOKIE'])) {
+            $pairs = explode('; ', $server['HTTP_COOKIE']);
+
+            foreach ($pairs as $pair) {
+                list($name, $value) = explode('=', $pair);
+                $cookies[$name] = urldecode($value);
+            }
+        }
+
+        $parameters = array();
+        $files      = array();
+        $content    = '';
+
+        if ($server['CONTENT_LENGTH'] > 0) {
+            $str = stream_get_contents($conn, $server['CONTENT_LENGTH']);
+            
+            if (false !== $str) {
+                $content = $this->parseBody($str, $server, $parameters, $files);
+            }
+        }
+
+        return Request::create($server['REQUEST_URI'], $server['REQUEST_METHOD'], $parameters, $cookies, $files, $server, $content);
+    }
+
+    /**
+     * Parserequest headers
+     * 
+     * @param string $str
+     * @return array 
+     */
+    public function parseHeaders($str, $host, $port, $script)
+    {
+        $headers = array();
+
+        $lines = preg_split('|(?:\r?\n)+|m', $str); // getting headers
 
         list($method, $uri, $version) = sscanf(array_shift($lines), "%s %s %s");
 
@@ -178,76 +211,84 @@ class ApplicationServerExtension implements ExtensionInterface
                 $hName = 'HTTP_' . str_replace('-', '_', strtoupper($m[1]));
                 $hValue = $m[2];
 
-                if (isset($server[$hName])) {
-                    if (!is_array($server[$hName])) {
-                        $server[$hName] = array($server[$hName]);
+                if (isset($headers[$hName])) {
+                    if (!is_array($headers[$hName])) {
+                        $headers[$hName] = array($headers[$hName]);
                     }
 
-                    $server[$hName][] = $hValue;
+                    $headers[$hName][] = $hValue;
                 } else {
-                    $server[$hName] = $hValue;
+                    $headers[$hName] = $hValue;
                 }
                 $lastHeader = $hName;
             } elseif (preg_match("|^\s+(.+)$|", $line, $m) && $lastHeader !== null) {
-                if (is_array($server[$lastHeader])) {
-                    end($server[$lastHeader]);
-                    $lastHeader_key = key($server[$lastHeader]);
-                    $server[$lastHeader][$lastHeader_key] .= $m[1];
+                if (is_array($headers[$lastHeader])) {
+                    end($headers[$lastHeader]);
+                    $lastHeader_key = key($headers[$lastHeader]);
+                    $headers[$lastHeader][$lastHeader_key] .= $m[1];
                 } else {
-                    $server[$lastHeader] .= $m[1];
+                    $headers[$lastHeader] .= $m[1];
                 }
             }
         }
 
-        $server['HTTP_VERSION']    = $version;
-        $server['SERVER_SOFTWARE'] = __CLASS__;
-        $server['SCRIPT_NAME']     = '/' . ltrim($script, '/');
-        $server['SCRIPT_FILENAME'] = str_replace('\\', '/', getcwd() . DIRECTORY_SEPARATOR . ltrim($script, '/'));
+        $headers['HTTP_VERSION']    = $version;
+        $headers['REQUEST_METHOD']  = $method;
+        $headers['REQUEST_URI']     = $uri;
+        $headers['HTTP_VERSION']    = $version;
+        $headers['SERVER_SOFTWARE'] = __CLASS__;
+        $headers['SCRIPT_NAME']     = '/' . ltrim($script, '/');
+        $headers['SCRIPT_FILENAME'] = str_replace('\\', '/', getcwd() . DIRECTORY_SEPARATOR . ltrim($script, '/'));
 
-        if (null !== $remoteAddr) {
-            $pos = strrpos($remoteAddr, ':');
-            $server['REMOTE_ADDR'] = substr($remoteAddr, 0, $pos);
-            $server['REMOTE_PORT'] = substr($remoteAddr, $pos + 1);
-        }
-
-        if (isset($server['HTTP_HOST'])) {
-            if (false === ($pos = strpos($server['HTTP_HOST'], ':'))) {
-                $host = $server['HTTP_HOST'];
-                $port = $port;
+        if (isset($headers['HTTP_HOST'])) {
+            if (false === ($pos = strpos($headers['HTTP_HOST'], ':'))) {
+                $headers['SERVER_NAME'] = $headers['HTTP_HOST'];
+                $headers['SERVER_PORT'] = '80';
             } else {
-                $host = substr($server['HTTP_HOST'], 0, $pos);
-                $port = substr($server['HTTP_HOST'], $pos + 1);
+                $headers['SERVER_NAME'] = substr($headers['HTTP_HOST'], 0, $pos);
+                $headers['SERVER_PORT'] = substr($headers['HTTP_HOST'], $pos + 1);
             }
-
-            $server['SERVER_NAME'] = $host;
-            $server['SERVER_PORT'] = (string) $port;
         } else {
-            $server['HTTP_HOST']   = $host . ':' . $port;
-            $server['SERVER_NAME'] = $host;
-            $server['SERVER_PORT'] = $port;
+            $headers['HTTP_HOST']   = $host . ':' . $port;
+            $headers['SERVER_NAME'] = $host;
+            $headers['SERVER_PORT'] = (string) $port;
         }
 
-        if (isset($server['HTTP_CONTENT_TYPE'])) {
-            $server['CONTENT_TYPE'] = $server['HTTP_CONTENT_TYPE'];
-            unset($server['HTTP_CONTENT_TYPE']);
+        if (isset($headers['HTTP_CONTENT_TYPE'])) {
+            $headers['CONTENT_TYPE'] = $headers['HTTP_CONTENT_TYPE'];
+            unset($headers['HTTP_CONTENT_TYPE']);
         }
 
-        if (isset($server['HTTP_CONTENT_LENGTH'])) {
-            $server['CONTENT_LENGTH'] = $server['HTTP_CONTENT_LENGTH'];
-            unset($server['HTTP_CONTENT_LENGTH']);
+        if (isset($headers['HTTP_CONTENT_LENGTH'])) {
+            $headers['CONTENT_LENGTH'] = (integer) $headers['HTTP_CONTENT_LENGTH'];
+            unset($headers['HTTP_CONTENT_LENGTH']);
         } else {
-            $server['CONTENT_LENGTH'] = 0;
+            $headers['CONTENT_LENGTH'] = 0;
         }
 
+        return $headers;
+    }
+
+    /**
+     * Parse request body
+     * 
+     * @param string $str
+     * @param array $server
+     * @param array $parameters
+     * @param array $files
+     * @return string 
+     */
+    public function parseBody($str, &$server, &$parameters = array(), &$files = array())
+    {
         // TODO: handle multipart/form-data etc.
-        if ($content != '' && 
-            in_array(strtoupper($method), array('POST', 'PUT', 'DELETE')) && 
+        if (isset($server['REQUEST_METHOD']) &&
+            in_array(strtoupper($server['REQUEST_METHOD']), array('POST', 'PUT', 'DELETE')) && 
             isset($server['CONTENT_TYPE']) && 
             $server['CONTENT_TYPE'] == 'application/x-www-form-urlencoded') {
 
-            parse_str($content, $parameters);
+            parse_str($str, $parameters);
         }
 
-        return Request::create($uri, $method, $parameters, $cookies, $files, $server, $content);
+        return $str;
     }
 }
