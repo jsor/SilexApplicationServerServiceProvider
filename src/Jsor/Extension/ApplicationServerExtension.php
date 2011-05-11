@@ -111,17 +111,17 @@ class ApplicationServerExtension implements ExtensionInterface
 
                     // Squeeze cookie headers in, ugly hack...
                     $cookieHeaders = '';
-                    foreach ($response->headers->getCookies() as $cookie) {
-                        $string = $cookie->getName().'=';
 
-                        if ('' == $cookie->getValue()) {
-                            // deleting
-                            $string .= 'deleted; expires='.date("D, d-M-Y H:i:s T", time() - 31536001);
+                    foreach ($response->headers->getCookies() as $cookie) {
+                        $string = urlencode($cookie->getName()) . '=';
+
+                        if (null == $cookie->getValue()) {
+                            $string .= 'deleted; expires=' . date("D, d-M-Y H:i:s T", time() - 31536001);
                         } else {
                             $string .= urlencode($cookie->getValue());
 
                             if ($cookie->getExpiresTime() > 0) {
-                                $string .= '; expires='.date("D, d-M-Y H:i:s T", $cookie->getExpiresTime());
+                                $string .= '; expires=' . date("D, d-M-Y H:i:s T", $cookie->getExpiresTime());
                             }
                         }
 
@@ -141,13 +141,13 @@ class ApplicationServerExtension implements ExtensionInterface
                             $string .= '; httponly';
                         }
 
-                        $cookieHeaders .= $string . "\n";
+                        $cookieHeaders .= 'Set-Cookie: ' . $string . "\r\n";
                     }
-                    
+
                     $response = $response->__toString();
-                    
+
                     if ($cookieHeaders != '') {
-                        $response = str_replace("\n\n", "\n" . $cookieHeaders . "\n");
+                        $response = preg_replace("/\r?\n\r?\n/m", "\r\n" . $cookieHeaders . "\r\n", $response);
                     }
 
                     fwrite($conn, $response);
