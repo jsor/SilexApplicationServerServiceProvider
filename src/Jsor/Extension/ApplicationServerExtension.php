@@ -30,7 +30,7 @@ class ApplicationServerExtension implements ExtensionInterface
 
     /**
      * Register the extension.
-     * 
+     *
      * @param Application $app
      * @return void
      */
@@ -44,7 +44,7 @@ class ApplicationServerExtension implements ExtensionInterface
 
     /**
      * @param Application $app
-     * @return ApplicationServerExtension 
+     * @return ApplicationServerExtension
      */
     public function setApplication(Application $app)
     {
@@ -53,7 +53,7 @@ class ApplicationServerExtension implements ExtensionInterface
     }
 
     /**
-     * @return Application 
+     * @return Application
      */
     public function getApplication()
     {
@@ -62,13 +62,13 @@ class ApplicationServerExtension implements ExtensionInterface
 
     /**
      * Start the application server.
-     * 
+     *
      * @param string $port
      * @param string $host
      * @param string $script
      * @return ApplicationServerExtension
      */
-    public function listen($port, $host = null, $script = null) 
+    public function listen($port, $host = null, $script = null)
     {
         if (!$host) {
             $host = '0.0.0.0';
@@ -169,7 +169,7 @@ class ApplicationServerExtension implements ExtensionInterface
      * @param string $host
      * @param string $port
      * @param string $script
-     * @return Request 
+     * @return Request
      */
     public function createRequest($conn, $host, $port, $script)
     {
@@ -182,7 +182,7 @@ class ApplicationServerExtension implements ExtensionInterface
             }
         } while (false === $str);
 
-        $server = $this->parseHeaders($str, $host, $port, $script);
+        $this->processHeaders($str, $host, $port, $script, $server);
 
         $remoteAddr = stream_socket_get_name($conn, true);
 
@@ -210,11 +210,14 @@ class ApplicationServerExtension implements ExtensionInterface
         $files      = array();
         $content    = '';
 
-        if ($server['CONTENT_LENGTH'] > 0) {
+        if (in_array(strtoupper($server['REQUEST_METHOD']), array('POST', 'PUT', 'DELETE')) &&
+            $server['CONTENT_LENGTH'] > 0) {
+
             $str = stream_get_contents($conn, $server['CONTENT_LENGTH']);
-            
+
             if (false !== $str) {
-                $content = $this->parseBody($str, $server, $parameters, $files);
+                $content = $str;
+                $this->processBody($content, $server, $parameters, $files);
             }
         }
 
@@ -222,114 +225,310 @@ class ApplicationServerExtension implements ExtensionInterface
     }
 
     /**
-     * Parserequest headers
-     * 
+     * Process request headers
+     *
      * @param string $str
-     * @return array 
+     * @param string $host
+     * @param string $port
+     * @param string $script
+     * @param array $server
+     * @return array
      */
-    public function parseHeaders($str, $host, $port, $script)
+    public function processHeaders($str, $host, $port, $script, &$server)
+    {
+        if (null === $server) {
+            $server = array();
+        }
+
+        $server = array_merge($server, $this->parseHeaders($str));
+
+        preg_match("|^([^\s]+) ([^\s]+) ([^\r\n]+)|", $str, $m);
+
+        $server['REQUEST_METHOD']  = $m[1];
+        $server['REQUEST_URI']     = $m[2];
+        $server['HTTP_VERSION']    = $m[3];
+
+        $server['SERVER_SOFTWARE'] = __CLASS__;
+        $server['SCRIPT_NAME']     = '/' . ltrim($script, '/');
+        $server['SCRIPT_FILENAME'] = str_replace('\\', '/', getcwd() . DIRECTORY_SEPARATOR . ltrim($script, '/'));
+
+        if (isset($server['HTTP_HOST'])) {
+            if (false === ($pos = strpos($server['HTTP_HOST'], ':'))) {
+                $server['SERVER_NAME'] = $server['HTTP_HOST'];
+                $server['SERVER_PORT'] = '80';
+            } else {
+                $server['SERVER_NAME'] = substr($server['HTTP_HOST'], 0, $pos);
+                $server['SERVER_PORT'] = substr($server['HTTP_HOST'], $pos + 1);
+            }
+        } else {
+            $server['HTTP_HOST']   = $host . ':' . $port;
+            $server['SERVER_NAME'] = $host;
+            $server['SERVER_PORT'] = (string) $port;
+        }
+
+        if (isset($server['HTTP_CONTENT_TYPE'])) {
+            $server['CONTENT_TYPE'] = $server['HTTP_CONTENT_TYPE'];
+            unset($server['HTTP_CONTENT_TYPE']);
+        }
+
+        if (isset($server['HTTP_CONTENT_LENGTH'])) {
+            $server['CONTENT_LENGTH'] = (integer) $server['HTTP_CONTENT_LENGTH'];
+            unset($server['HTTP_CONTENT_LENGTH']);
+        } else {
+            $server['CONTENT_LENGTH'] = 0;
+        }
+    }
+
+    /**
+     * Taken from ZF2 (https://github.com/zendframework/zf2/blob/master/library/Zend/Http/Response.php)
+     *
+     * @param string $str
+     * @return array
+     */
+    public function parseHeaders($str)
     {
         $headers = array();
 
-        $lines = preg_split('|(?:\r?\n)+|m', $str); // getting headers
+        // First, split body and headers
+        $parts = preg_split('|(?:\r?\n){2}|m', $str, 2);
+        if (!$parts[0]) {
+            return $headers;
+        }
 
-        list($method, $uri, $version) = sscanf(array_shift($lines), "%s %s %s");
+        // Split headers part to lines
+        $lines = explode("\n", $parts[0]);
+        unset($parts);
+        $last_header = null;
 
-        $lastHeader = null;
-
-        // Taken from ZF2 (https://github.com/zendframework/zf2/blob/master/library/Zend/Http/Response.php)
         foreach ($lines as $line) {
             $line = trim($line, "\r\n");
-
             if ($line == "") {
                 break;
             }
 
             // Locate headers like 'Location: ...' and 'Location:...' (note the missing space)
             if (preg_match("|^([\w-]+):\s*(.+)|", $line, $m)) {
-                unset($lastHeader);
-                $hName = strtolower($m[1]);
-                $hName = 'HTTP_' . str_replace('-', '_', strtoupper($m[1]));
-                $hValue = $m[2];
+                unset($last_header);
+                $h_name = 'HTTP_' . str_replace('-', '_', strtoupper($m[1]));
+                $h_value = $m[2];
 
-                if (isset($headers[$hName])) {
-                    if (!is_array($headers[$hName])) {
-                        $headers[$hName] = array($headers[$hName]);
+                if (isset($headers[$h_name])) {
+                    if (!is_array($headers[$h_name])) {
+                        $headers[$h_name] = array($headers[$h_name]);
                     }
 
-                    $headers[$hName][] = $hValue;
+                    $headers[$h_name][] = $h_value;
                 } else {
-                    $headers[$hName] = $hValue;
+                    $headers[$h_name] = $h_value;
                 }
-                $lastHeader = $hName;
-            } elseif (preg_match("|^\s+(.+)$|", $line, $m) && $lastHeader !== null) {
-                if (is_array($headers[$lastHeader])) {
-                    end($headers[$lastHeader]);
-                    $lastHeader_key = key($headers[$lastHeader]);
-                    $headers[$lastHeader][$lastHeader_key] .= $m[1];
+                $last_header = $h_name;
+            } elseif (preg_match("|^\s+(.+)$|", $line, $m) && $last_header !== null) {
+                if (is_array($headers[$last_header])) {
+                    end($headers[$last_header]);
+                    $last_header_key = key($headers[$last_header]);
+                    $headers[$last_header][$last_header_key] .= $m[1];
                 } else {
-                    $headers[$lastHeader] .= $m[1];
+                    $headers[$last_header] .= $m[1];
                 }
             }
-        }
-
-        $headers['HTTP_VERSION']    = $version;
-        $headers['REQUEST_METHOD']  = $method;
-        $headers['REQUEST_URI']     = $uri;
-        $headers['HTTP_VERSION']    = $version;
-        $headers['SERVER_SOFTWARE'] = __CLASS__;
-        $headers['SCRIPT_NAME']     = '/' . ltrim($script, '/');
-        $headers['SCRIPT_FILENAME'] = str_replace('\\', '/', getcwd() . DIRECTORY_SEPARATOR . ltrim($script, '/'));
-
-        if (isset($headers['HTTP_HOST'])) {
-            if (false === ($pos = strpos($headers['HTTP_HOST'], ':'))) {
-                $headers['SERVER_NAME'] = $headers['HTTP_HOST'];
-                $headers['SERVER_PORT'] = '80';
-            } else {
-                $headers['SERVER_NAME'] = substr($headers['HTTP_HOST'], 0, $pos);
-                $headers['SERVER_PORT'] = substr($headers['HTTP_HOST'], $pos + 1);
-            }
-        } else {
-            $headers['HTTP_HOST']   = $host . ':' . $port;
-            $headers['SERVER_NAME'] = $host;
-            $headers['SERVER_PORT'] = (string) $port;
-        }
-
-        if (isset($headers['HTTP_CONTENT_TYPE'])) {
-            $headers['CONTENT_TYPE'] = $headers['HTTP_CONTENT_TYPE'];
-            unset($headers['HTTP_CONTENT_TYPE']);
-        }
-
-        if (isset($headers['HTTP_CONTENT_LENGTH'])) {
-            $headers['CONTENT_LENGTH'] = (integer) $headers['HTTP_CONTENT_LENGTH'];
-            unset($headers['HTTP_CONTENT_LENGTH']);
-        } else {
-            $headers['CONTENT_LENGTH'] = 0;
         }
 
         return $headers;
     }
 
     /**
-     * Parse request body
-     * 
+     * Process request body
+     *
      * @param string $str
      * @param array $server
      * @param array $parameters
      * @param array $files
-     * @return string 
+     * @return string
      */
-    public function parseBody($str, &$server, &$parameters = array(), &$files = array())
+    public function processBody($str, &$server, &$parameters, &$files)
     {
-        // TODO: handle multipart/form-data etc.
-        if (isset($server['REQUEST_METHOD']) &&
-            in_array(strtoupper($server['REQUEST_METHOD']), array('POST', 'PUT', 'DELETE')) && 
-            isset($server['CONTENT_TYPE']) && 
-            $server['CONTENT_TYPE'] == 'application/x-www-form-urlencoded') {
-
-            parse_str($str, $parameters);
+        if (null === $server) {
+            $server = array();
         }
 
-        return $str;
+        if (null === $parameters) {
+            $parameters = array();
+        }
+
+        if (null === $files) {
+            $files = array();
+        }
+
+        if (!isset($server['CONTENT_TYPE'])) {
+            return;
+        }
+
+        if (stripos($server['CONTENT_TYPE'], 'application/x-www-form-urlencoded') !== false) {
+            parse_str($str, $parameters);
+        } elseif (stripos($server['CONTENT_TYPE'], 'multipart/form-data') !== false) {
+            $this->processMultipart($server['CONTENT_TYPE'], $str, $parameters, $files);
+        }
+    }
+
+    /**
+     * Taken from https://github.com/indeyets/appserver-in-php/blob/master/AiP/Middleware/HTTPParser.php
+     *
+     * @param string $contentType
+     * @param string $str
+     * @param array $parameters
+     * @param array $files
+     */
+    public function processMultipart($contentType, $str, &$parameters, &$files)
+    {
+        foreach (explode('; ', $contentType) as $contentType_part) {
+            $pos = strpos($contentType_part, 'boundary=');
+
+            if ($pos !== 0)
+                continue;
+
+            $boundary = '--'.substr($contentType_part, $pos + 9);
+            $boundary_len = strlen($boundary);
+        }
+
+        if (!isset($boundary))
+            throw new HTTPParser\BadProtocolException("Didn't find boundary-declaration in multipart");
+
+        $post_strs = array();
+        $pos = 0;
+        while (substr($str, $pos + $boundary_len, 2) != '--') {
+            // getting headers of part
+            $h_start = $pos + $boundary_len + 2;
+            $h_end = strpos($str, "\r\n\r\n", $h_start);
+
+            if (false === $h_end) {
+                throw new HTTPParser\BadProtocolException("Didn't find end of headers-zone");
+            }
+
+            $headers = array();
+            foreach (explode("\r\n", substr($str, $h_start, $h_end - $h_start)) as $h_str) {
+                $divider = strpos($h_str, ':');
+                $headers[substr($h_str, 0, $divider)] = html_entity_decode(substr($h_str, $divider + 2), ENT_QUOTES, 'UTF-8');
+            }
+
+            if (!isset($headers['Content-Disposition']))
+                throw new HTTPParser\BadProtocolException("Didn't find Content-disposition in one of the parts of multipart: ".var_export(array_keys($headers), true));
+
+            // parsing dispositin-header of part
+            $disposition = array();
+            foreach (explode("; ", $headers['Content-Disposition']) as $d_part) {
+                if ($d_part == 'form-data')
+                    continue;
+
+                $divider = strpos($d_part, '=');
+                $disposition[substr($d_part, 0, $divider)] = substr($d_part, $divider + 2, -1);
+            }
+
+            // getting body of part
+            $b_start = $h_end + 4;
+            $b_end = strpos($str, "\r\n".$boundary, $b_start);
+
+            if (false === $b_end) {
+                throw new HTTPParser\BadProtocolException("Didn't find end of body :-/");
+            }
+
+            $file_data = substr($str, $b_start, $b_end - $b_start);
+
+            if (isset($disposition['filename'])) {
+                $tmp_dir = ini_get('upload_tmp_dir') ? ini_get('upload_tmp_dir') : sys_get_temp_dir();
+
+                // ToDo:
+                //  UPLOAD_ERR_FORM_SIZE
+                //  UPLOAD_ERR_PARTIAL (?)
+                //  UPLOAD_ERR_NO_FILE (?)
+                //  UPLOAD_ERR_EXTENSION
+
+                if (empty($tmp_dir)) {
+                    $fdata = array(
+                        'name' => '',
+                        'type' => '',
+                        'tmp_name' => '',
+                        'error' => UPLOAD_ERR_NO_TMP_DIR,
+                        'size' => 0,
+                    );
+                } elseif ($b_end - $b_start > $this->iniStringToBytes(ini_get('upload_max_filesize'))) {
+                    $fdata = array(
+                        'name' => '',
+                        'type' => '',
+                        'tmp_name' => '',
+                        'error' => UPLOAD_ERR_INI_SIZE,
+                        'size' => 0,
+                    );
+                } elseif (0 === strlen($disposition['filename'])) {
+                    $fdata = array(
+                        'name' => '',
+                        'type' => '',
+                        'tmp_name' => '',
+                        'error' => UPLOAD_ERR_NO_FILE,
+                        'size' => 0,
+                    );
+                } elseif (false === $tmp_file = tempnam($tmp_dir, 'SCGI') or false === file_put_contents($tmp_file, $file_data)) {
+                    if ($tmp_file !== false)
+                        unlink($tmp_file);
+
+                    $fdata = array(
+                        'name' => '',
+                        'type' => '',
+                        'tmp_name' => '',
+                        'error' => UPLOAD_ERR_CANT_WRITE,
+                        'size' => 0,
+                    );
+                } else {
+                    $filesize = filesize($tmp_file);
+                    $fdata = array(
+                        'name' => $disposition['filename'],
+                        'type' => '',
+                        'tmp_name' => $tmp_file,
+                        'error' => (0 === $filesize) ? 5 : UPLOAD_ERR_OK,
+                        'size' => $filesize,
+                    );
+                }
+
+                // Files can be submitted as arrays. If field name is "file[xyz]",
+                // name must be stored as "file[name][xyz]". To avoid manual parsing
+                // of the tricky syntax, we use eval().
+
+                // First, we quote everything except square brackets.
+                $sel = preg_replace('/([^\[\]]+)/', '\'\1\'', $disposition['name']);
+
+                // Second, insert a special key between the name of the field and
+                // the rest of the array path.
+                $parts = explode('[', $sel, 2);
+                foreach (array_keys($fdata) as $key) {
+                    if (count($parts) == 1) {
+                        $files[$disposition['name']][$key] = $fdata[$key];
+                    } else {
+                        eval($code = '$files[' . $parts[0] . '][\'' . $key . '\'][' . $parts[1] . ' = $fdata[\'' . $key . '\'];');
+                    }
+                }
+            } else {
+                $post_strs[] = urlencode($disposition['name']).'='.urlencode($file_data);
+            }
+            unset($file_data);
+
+            $pos = $b_end + 2;
+        }
+
+        parse_str(implode('&', $post_strs), $parameters);
+    }
+
+    public function iniStringToBytes($val)
+    {
+        $val = trim($val);
+        $last = strtolower($val{strlen($val)-1});
+        switch($last) {
+            case 'g':
+                $val *= 1024;
+            case 'm':
+                $val *= 1024;
+            case 'k':
+                $val *= 1024;
+        }
+
+        return $val;
     }
 }
