@@ -366,7 +366,11 @@ class ApplicationServerExtension implements ExtensionInterface
         if (stripos($server['CONTENT_TYPE'], 'application/x-www-form-urlencoded') !== false) {
             parse_str($str, $parameters);
         } elseif (stripos($server['CONTENT_TYPE'], 'multipart/form-data') !== false) {
-            $this->processMultipart($server['CONTENT_TYPE'], $str, $parameters, $files);
+            try {
+                $this->processMultipart($server['CONTENT_TYPE'], $str, $parameters, $files);
+            } catch (\Exception $e) {
+                throw new \Symfony\Component\HttpKernel\Exception\HttpException(400);
+            }
         }
     }
 
@@ -391,7 +395,7 @@ class ApplicationServerExtension implements ExtensionInterface
         }
 
         if (!isset($boundary))
-            throw new HTTPParser\BadProtocolException("Didn't find boundary-declaration in multipart");
+            throw new \RuntimeException("Didn't find boundary-declaration in multipart");
 
         $post_strs = array();
         $pos = 0;
@@ -401,7 +405,7 @@ class ApplicationServerExtension implements ExtensionInterface
             $h_end = strpos($str, "\r\n\r\n", $h_start);
 
             if (false === $h_end) {
-                throw new HTTPParser\BadProtocolException("Didn't find end of headers-zone");
+                throw new \RuntimeException("Didn't find end of headers-zone");
             }
 
             $headers = array();
@@ -411,7 +415,7 @@ class ApplicationServerExtension implements ExtensionInterface
             }
 
             if (!isset($headers['Content-Disposition']))
-                throw new HTTPParser\BadProtocolException("Didn't find Content-disposition in one of the parts of multipart: ".var_export(array_keys($headers), true));
+                throw new \RuntimeException("Didn't find Content-disposition in one of the parts of multipart: ".var_export(array_keys($headers), true));
 
             // parsing dispositin-header of part
             $disposition = array();
@@ -428,7 +432,7 @@ class ApplicationServerExtension implements ExtensionInterface
             $b_end = strpos($str, "\r\n".$boundary, $b_start);
 
             if (false === $b_end) {
-                throw new HTTPParser\BadProtocolException("Didn't find end of body :-/");
+                throw new \RuntimeException("Didn't find end of body :-/");
             }
 
             $file_data = substr($str, $b_start, $b_end - $b_start);
@@ -466,7 +470,7 @@ class ApplicationServerExtension implements ExtensionInterface
                         'error' => UPLOAD_ERR_NO_FILE,
                         'size' => 0,
                     );
-                } elseif (false === $tmp_file = tempnam($tmp_dir, 'SCGI') or false === file_put_contents($tmp_file, $file_data)) {
+                } elseif (false === $tmp_file = tempnam($tmp_dir, __CLASS__) or false === file_put_contents($tmp_file, $file_data)) {
                     if ($tmp_file !== false)
                         unlink($tmp_file);
 
@@ -479,9 +483,22 @@ class ApplicationServerExtension implements ExtensionInterface
                     );
                 } else {
                     $filesize = filesize($tmp_file);
+
+                    $handle = finfo_open(FILEINFO_MIME);
+                    $type = finfo_file($handle, $tmp_file);
+                    finfo_close($handle);
+
+                    if (false !== ($pos = strpos($type, ';'))) {
+                        $type = substr($type, 0, $pos);
+                    }
+
+                    if (empty($type) || $type == 'application/x-empty') {
+                        $type = '';
+                    }
+
                     $fdata = array(
                         'name' => $disposition['filename'],
-                        'type' => '',
+                        'type' => $type,
                         'tmp_name' => $tmp_file,
                         'error' => (0 === $filesize) ? 5 : UPLOAD_ERR_OK,
                         'size' => $filesize,
