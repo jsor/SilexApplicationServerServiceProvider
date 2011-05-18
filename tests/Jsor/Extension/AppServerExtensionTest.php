@@ -122,4 +122,23 @@ Content-Type: text/html';
         $this->assertEquals('val1', $parameters['key1']);
         $this->assertEquals('val2', $parameters['key2']);
     }
+
+    public function testProcessBodyParsesMultipartContent()
+    {
+        $extension = new ApplicationServerExtension();
+
+        $str = file_get_contents(__DIR__ . '/_files/multipart_content.txt');
+
+        $server = array(
+            'REQUEST_METHOD' => 'POST',
+            'CONTENT_TYPE'   => 'multipart/form-data; boundary=---------------------------20945431327756'
+        );
+
+        $extension->processBody($str, $server, $parameters, $files);
+
+        $this->assertEquals('Submit', $parameters['submit']);
+        $this->assertArrayHasKey('file', $files);
+        $this->assertArrayHasKey('name', $files['file']);
+        $this->assertEquals('jan.jpg', $files['file']['name']);
+    }
 }
