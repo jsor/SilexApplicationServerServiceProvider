@@ -109,48 +109,7 @@ class ApplicationServerExtension implements ExtensionInterface
 
                     $response = $app->handle($request);
 
-                    // Squeeze cookie headers in, ugly hack...
-                    $cookieHeaders = '';
-
-                    foreach ($response->headers->getCookies() as $cookie) {
-                        $string = urlencode($cookie->getName()) . '=';
-
-                        if (null == $cookie->getValue()) {
-                            $string .= 'deleted; expires=' . date("D, d-M-Y H:i:s T", time() - 31536001);
-                        } else {
-                            $string .= urlencode($cookie->getValue());
-
-                            if ($cookie->getExpiresTime() > 0) {
-                                $string .= '; expires=' . date("D, d-M-Y H:i:s T", $cookie->getExpiresTime());
-                            }
-                        }
-
-                        if (null !== $cookie->getPath()) {
-                            $string .= '; path='.$cookie->getPath();
-                        }
-
-                        if (null !== $cookie->getDomain()) {
-                            $string .= '; domain='.$cookie->getDomain();
-                        }
-
-                        if (true === $cookie->isSecure()) {
-                            $string .= '; secure';
-                        }
-
-                        if (true === $cookie->isHttpOnly()) {
-                            $string .= '; httponly';
-                        }
-
-                        $cookieHeaders .= 'Set-Cookie: ' . $string . "\r\n";
-                    }
-
-                    $response = $response->__toString();
-
-                    if ($cookieHeaders != '') {
-                        $response = preg_replace("/\r?\n\r?\n/m", "\r\n" . $cookieHeaders . "\r\n", $response);
-                    }
-
-                    fwrite($conn, $response);
+                    fwrite($conn, $response->__toString());
                 }
 
                 fclose($conn);
