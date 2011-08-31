@@ -92,11 +92,9 @@ class ApplicationServerExtension implements ExtensionInterface
             $app = $this->getApplication();
 
             $app->error(function(\Exception $e) {
-                echo "  Exception handled\n";
+                echo "  Exception thrown\n";
                 echo "    Name: " . get_class($e) . "\n";
                 echo "    Message: " . $e->getMessage() . "\n\n";
-
-                return new Response('The server encountered an internal error and was unable to complete your request.', 500);
             });
 
             while ($conn = stream_socket_accept($socket, -1)) {
