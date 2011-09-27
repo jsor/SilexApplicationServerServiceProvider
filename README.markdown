@@ -16,10 +16,10 @@ Create a file with following content and run it from the command line:
 
 $app = new Silex\Application();
 
-$app->register(new Jsor\Extension\ApplicationServerServiceProvider());
+$app->register(new Jsor\ApplicationServerServiceProvider());
 
 $app->get('/', function() {
-        return "Hello world";
+    return "Hello world";
 });
 
 $app['application_server']->listen('8080', '127.0.0.1', '/index.php');
