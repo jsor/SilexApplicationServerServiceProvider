@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the Silex ApplicationServerExtension.
+ * This file is part of the Silex ApplicationServerServiceProvider.
  *
  * (c) Jan Sorgalla <jsorgalla@googlemail.com>
  *
@@ -12,5 +12,5 @@
 require_once 'phar://'.__DIR__.'/../silex.phar/autoload.php';
 
 $loader->registerNamespaces(array(
-    'Jsor' => array(__DIR__, __DIR__.'/../src') 
+    'Jsor' => array(__DIR__, __DIR__.'/../src')
 ));

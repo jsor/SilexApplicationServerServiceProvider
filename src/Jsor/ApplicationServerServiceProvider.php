@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the Silex ApplicationServerExtension.
+ * This file is part of the Silex ApplicationServerServiceProvider.
  *
  * (c) Jan Sorgalla <jsorgalla@googlemail.com>
  *
@@ -9,19 +9,19 @@
  * file that was distributed with this source code.
  */
 
-namespace Jsor\Extension;
+namespace Jsor;
 
 use Silex\Application;
-use Silex\ExtensionInterface;
+use Silex\ServiceProviderInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * The Silex ApplicationServerExtension class.
+ * The Silex ApplicationServerServiceProvider class.
  *
  * @author Jan Sorgalla <jsorgalla@googlemail.com>
  */
-class ApplicationServerExtension implements ExtensionInterface
+class ApplicationServerServiceProvider implements ServiceProviderInterface
 {
     /**
      * @var Application
@@ -44,7 +44,7 @@ class ApplicationServerExtension implements ExtensionInterface
 
     /**
      * @param Application $app
-     * @return ApplicationServerExtension
+     * @return ApplicationServerServiceProvider
      */
     public function setApplication(Application $app)
     {
@@ -66,7 +66,7 @@ class ApplicationServerExtension implements ExtensionInterface
      * @param string $port
      * @param string $host
      * @param string $script
-     * @return ApplicationServerExtension
+     * @return ApplicationServerServiceProvider
      */
     public function listen($port, $host = null, $script = null)
     {

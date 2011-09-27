@@ -11,14 +11,14 @@
          bootstrap="tests/bootstrap.php"
 >
     <testsuites>
-        <testsuite name="Jsor ApplicationServerExtension Test Suite">
-            <directory>./tests/Jsor/Extension/</directory>
+        <testsuite name="Jsor ApplicationServerServiceProvider Test Suite">
+            <directory>./tests/Jsor/</directory>
         </testsuite>
     </testsuites>
 
     <filter>
         <whitelist>
-            <directory>./src/Jsor/Extension/</directory>
+            <directory>./src/Jsor/</directory>
         </whitelist>
     </filter>
 </phpunit>

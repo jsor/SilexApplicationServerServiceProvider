@@ -1,5 +1,5 @@
-ApplicationServerExtension for Silex
-====================================
+ApplicationServerServiceProvider for Silex
+==========================================
 
 A simple application server for your Silex applications.
 
@@ -16,7 +16,7 @@ Create a file with following content and run it from the command line:
 
 $app = new Silex\Application();
 
-$app->register(new Jsor\Extension\ApplicationServerExtension());
+$app->register(new Jsor\Extension\ApplicationServerServiceProvider());
 
 $app->get('/', function() {
         return "Hello world";

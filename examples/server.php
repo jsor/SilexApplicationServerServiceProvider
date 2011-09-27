@@ -7,7 +7,7 @@ $app = new Silex\Application();
 
 $app['autoloader']->registerNamespace('Jsor', __DIR__ . '/../src');
 
-$app->register(new Jsor\Extension\ApplicationServerExtension());
+$app->register(new Jsor\ApplicationServerServiceProvider());
 
 $app->get('/', function() {
     return "Hello world";

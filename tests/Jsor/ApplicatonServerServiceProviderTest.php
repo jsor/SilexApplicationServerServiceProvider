@@ -1,7 +1,7 @@
 <?php
 
 /*
- * This file is part of the Silex ApplicationServerExtension.
+ * This file is part of the Silex ApplicationServerServiceProvider.
  *
  * (c) Jan Sorgalla <jsorgalla@googlemail.com>
  *
@@ -9,22 +9,22 @@
  * file that was distributed with this source code.
  */
 
-namespace Jsor\Extension;
+namespace Jsor;
 
 use Silex\Application;
 
 /**
- * ApplicationServerExtension test cases.
+ * ApplicationServerServiceProvider test cases.
  *
  * @author Jan Sorgalla <jsorgalla@googlemail.com>
  */
-class ApplicationServerExtensionTest extends \PHPUnit_Framework_TestCase
+class ApplicationServerServiceProviderTest extends \PHPUnit_Framework_TestCase
 {
-    public function testRegisterReturnsExtensionInstance()
+    public function testRegisterReturnsServiceProviderInstance()
     {
         $app = new Application();
 
-        $extension = new ApplicationServerExtension();
+        $extension = new ApplicationServerServiceProvider();
 
         $app->register($extension);
 
@@ -33,7 +33,7 @@ class ApplicationServerExtensionTest extends \PHPUnit_Framework_TestCase
 
     /*public function testProcessHeadersUsesDefaultHostAndPortIfNoHeader()
     {
-        $extension = new ApplicationServerExtension();
+        $extension = new ApplicationServerServiceProvider();
 
         $str = 'GET /app/index.php HTTP/1.1';
 
@@ -46,7 +46,7 @@ class ApplicationServerExtensionTest extends \PHPUnit_Framework_TestCase
 
     public function testProcessHeadersUsesHostAndPortFromHeader()
     {
-        $extension = new ApplicationServerExtension();
+        $extension = new ApplicationServerServiceProvider();
 
         $str = 'GET /app/index.php HTTP/1.1
 Host: localhost:9000';
@@ -60,7 +60,7 @@ Host: localhost:9000';
 
     public function testProcessHeadersSetsScriptNameAndFilename()
     {
-        $extension = new ApplicationServerExtension();
+        $extension = new ApplicationServerServiceProvider();
 
         $str = 'GET /app/index.php HTTP/1.1';
 
@@ -72,7 +72,7 @@ Host: localhost:9000';
 
     public function testProcessHeadersSetsMethodAndRequestUriAndVersion()
     {
-        $extension = new ApplicationServerExtension();
+        $extension = new ApplicationServerServiceProvider();
 
         $str = 'GET /app/index.php HTTP/1.1';
 
@@ -85,7 +85,7 @@ Host: localhost:9000';
 
     public function testProcessHeadersPopulatesHeaders()
     {
-        $extension = new ApplicationServerExtension();
+        $extension = new ApplicationServerServiceProvider();
 
         $str = 'GET /app/index.php HTTP/1.1
 Host: localhost:8080
@@ -108,7 +108,7 @@ Content-Type: text/html';
 
     public function testProcessBodyParsesUrlencodedContent()
     {
-        $extension = new ApplicationServerExtension();
+        $extension = new ApplicationServerServiceProvider();
 
         $str = 'key1=val1&key2=val2';
 
@@ -125,7 +125,7 @@ Content-Type: text/html';
 
     public function testProcessBodyParsesMultipartContent()
     {
-        $extension = new ApplicationServerExtension();
+        $extension = new ApplicationServerServiceProvider();
 
         $str = file_get_contents(__DIR__ . '/_files/multipart_content.txt');
 
