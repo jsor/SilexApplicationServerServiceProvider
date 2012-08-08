@@ -29,6 +29,11 @@ class ApplicationServerServiceProvider implements ServiceProviderInterface
     private $application;
 
     /**
+     * {@inhertidoc}
+     */
+    public function boot(Application $app) {}
+
+    /**
      * Register the extension.
      *
      * @param Application $app
