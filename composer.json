@@ -1,5 +1,5 @@
 {
-    "name": "jsor/aoolication-server-service-provider",
+    "name": "jsor/application-server-service-provider",
     "description": "A simple application server for your Silex applications",
     "keywords": ["silex", "application server"],
     "homepage": "https://github.com/jsor/SilexApplicationServerServiceProvider",
