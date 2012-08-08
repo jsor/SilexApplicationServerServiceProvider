@@ -9,8 +9,5 @@
  * file that was distributed with this source code.
  */
 
-require_once 'phar://'.__DIR__.'/../silex.phar/autoload.php';
-
-$loader->registerNamespaces(array(
-    'Jsor' => array(__DIR__, __DIR__.'/../src')
-));
+$loader = require __DIR__.'/../vendor/autoload.php';
+$loader->add('Jsor\\Tests', __DIR__);

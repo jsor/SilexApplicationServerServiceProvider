@@ -1,12 +1,9 @@
 #!/usr/bin/env php
 <?php
 
-require_once __DIR__ . '/../silex.phar';
+require __DIR__.'/../vendor/autoload.php';
 
 $app = new Silex\Application();
-
-$app['autoloader']->registerNamespace('Jsor', __DIR__ . '/../src');
-
 $app->register(new Jsor\ApplicationServerServiceProvider());
 
 $app->get('/', function() {

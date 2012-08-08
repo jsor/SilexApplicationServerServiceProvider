@@ -9,8 +9,9 @@
  * file that was distributed with this source code.
  */
 
-namespace Jsor;
+namespace Jsor\Tests;
 
+use Jsor\ApplicationServerServiceProvider;
 use Silex\Application;
 
 /**

@@ -1,0 +1,26 @@
+{
+    "name": "jsor/aoolication-server-service-provider",
+    "description": "A simple application server for your Silex applications",
+    "keywords": ["silex", "application server"],
+    "homepage": "https://github.com/jsor/SilexApplicationServerServiceProvider",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Jan Sorgalla",
+            "email": "jsorgalla@googlemail.com",
+            "homepage": "http://sorgalla.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.0"
+    },
+    "require-dev": {
+        "silex/silex": "1.0.*"
+    },
+    "minimum-stability": "dev",
+    "autoload": {
+        "psr-0": {
+            "Jsor": "src"
+        }
+    }
+}
