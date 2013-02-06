@@ -16,6 +16,7 @@ use Silex\ServiceProviderInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * The Silex ApplicationServerServiceProvider class.
@@ -116,14 +117,22 @@ class ApplicationServerServiceProvider implements ServiceProviderInterface
                         break;
                     }
 
+                    // Generate the response and run after middlewares if any
                     $response = $app->handle($request);
+                    $app->terminate($request, $response);
 
-                    fwrite($conn, $response->__toString());
+                    $response->prepare($request);
+
+                    if ($response instanceof StreamedResponse) {
+                        ob_start();
+                        $response->sendContent();
+                        $response = Response::create(ob_get_clean(), $response->getStatusCode(), $response->headers->all());
+                    }
+
+                    fwrite($conn, (string) $response);
                 }
-
                 fclose($conn);
             }
-
             fclose($socket);
         }
 
