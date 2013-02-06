@@ -194,12 +194,16 @@ class ApplicationServerServiceProvider implements ServiceProviderInterface
      * @param string $script
      *
      * @return array
+     *
+     * @throws \RuntimeException When the HTTP header format is invalid
      */
     public function processHeaders($str, $host, $port, $script)
     {
         $server = $this->parseHeaders($str);
 
-        preg_match("|^(.*?) (.*?) (.*?)\r\n|", $str, $m);
+        if (!preg_match("|^(.*?) (.*?) (.*?)\r\n|", $str, $m)) {
+            throw new \RuntimeException('Invalid HTTP header');
+        }
 
         $server['REQUEST_METHOD']  = $m[1];
         $server['REQUEST_URI']     = $m[2];
