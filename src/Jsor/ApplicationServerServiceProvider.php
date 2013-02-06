@@ -110,7 +110,7 @@ class ApplicationServerServiceProvider implements ServiceProviderInterface
                     echo "  Request Uri: " . $request->getRequestUri() . "\n";
                     echo "  Remote Addr: " . $request->getClientIp() . "\n\n";
 
-                    if (isset($app['application_server.shutdown_url']) && $app['application_server.shutdown_url'] = $request->getPathInfo()) {
+                    if (isset($app['application_server.shutdown_url']) && $app['application_server.shutdown_url'] === $request->getPathInfo()) {
                         fwrite($conn, (string) new Response('Shutting server down.'));
                         break;
                     }
