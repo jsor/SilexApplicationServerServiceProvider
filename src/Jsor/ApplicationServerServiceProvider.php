@@ -145,16 +145,15 @@ class ApplicationServerServiceProvider implements ServiceProviderInterface
             }
         } while (false === $str);
 
-        $this->processHeaders($str, $host, $port, $script, $server);
+        $server = $this->processHeaders($str, $host, $port, $script);
 
         $remoteAddr = stream_socket_get_name($conn, true);
 
         if ($remoteAddr) {
-            if (false === ($pos = strpos($remoteAddr, ':'))) {
-                $server['REMOTE_ADDR'] = $remoteAddr;
-            } else {
-                $server['REMOTE_ADDR'] = substr($remoteAddr, 0, $pos);
-                $server['REMOTE_PORT'] = substr($remoteAddr, $pos + 1);
+            $parts = explode(':', $remoteAddr);
+            $server['REMOTE_ADDR'] = $parts[0];
+            if (isset($parts[1])) {
+                $server['REMOTE_PORT'] = $parts[1];
             }
         }
 
@@ -194,18 +193,18 @@ class ApplicationServerServiceProvider implements ServiceProviderInterface
      * @param string $host
      * @param string $port
      * @param string $script
-     * @param array $server
+     *
      * @return array
+     *
+     * @throws \RuntimeException When the HTTP header format is invalid
      */
-    public function processHeaders($str, $host, $port, $script, &$server)
+    public function processHeaders($str, $host, $port, $script)
     {
-        if (null === $server) {
-            $server = array();
+        $server = $this->parseHeaders($str);
+
+        if (!preg_match("|^(.*?) (.*?) (.*?)\r\n|", $str, $m)) {
+            throw new \RuntimeException('Invalid HTTP header');
         }
-
-        $server = array_merge($server, $this->parseHeaders($str));
-
-        preg_match("|^([^\s]+) ([^\s]+) ([^\r\n]+)|", $str, $m);
 
         $server['REQUEST_METHOD']  = $m[1];
         $server['REQUEST_URI']     = $m[2];
@@ -213,16 +212,15 @@ class ApplicationServerServiceProvider implements ServiceProviderInterface
 
         $server['SERVER_SOFTWARE'] = __CLASS__;
         $server['SCRIPT_NAME']     = '/' . ltrim($script, '/');
-        $server['SCRIPT_FILENAME'] = str_replace('\\', '/', getcwd() . DIRECTORY_SEPARATOR . ltrim($script, '/'));
+        $server['SCRIPT_FILENAME'] = str_replace('\\', '/', getcwd() . '/' . ltrim($script, '/'));
 
         if (isset($server['HTTP_HOST'])) {
-            if (false === ($pos = strpos($server['HTTP_HOST'], ':'))) {
-                $server['SERVER_NAME'] = $server['HTTP_HOST'];
-                $server['SERVER_PORT'] = '80';
-            } else {
-                $server['SERVER_NAME'] = substr($server['HTTP_HOST'], 0, $pos);
-                $server['SERVER_PORT'] = substr($server['HTTP_HOST'], $pos + 1);
+            $server['SERVER_PORT'] = '80';
+            if (count($parts = explode(':', $server['HTTP_HOST'])) == 2) {
+                $server['SERVER_PORT'] = $parts[1];
             }
+
+            $server['SERVER_NAME'] = $parts[0];
         } else {
             $server['HTTP_HOST']   = $host . ':' . $port;
             $server['SERVER_NAME'] = $host;
@@ -240,6 +238,8 @@ class ApplicationServerServiceProvider implements ServiceProviderInterface
         } else {
             $server['CONTENT_LENGTH'] = 0;
         }
+
+        return $server;
     }
 
     /**
